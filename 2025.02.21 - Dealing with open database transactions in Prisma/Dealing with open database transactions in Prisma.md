@@ -1,17 +1,18 @@
 ---
 title: Dealing with open database transactions in Prisma
 author: Ronald Rey
+username: @reyronald
 date: 2025-02-22
-tags: [Prisma, Database, Transactions]
+tags: [Prisma, Drizzle, ORM, Database, Transactions]
 category: Databases
-summary: This post discusses how to handle open database transactions in Prisma.
+summary: This post discusses challenges faced when dealing with open database transactions in Prisma and the solution implemented using AsyncLocalStorage and proxies.
 ---
 
 # Dealing with open database transactions in Prisma
 
 There’s an issue that has been affecting one of the applications I maintain: runtime errors due to timed-out database transactions. The specific constraints that I was dealing with and the way I ended up resolving the issue were a bit interesting, so I felt like writing about it.
 
-For context, this happened in a Node.js v22 application that uses Prisma v6 as its ORM against a MySQL database.
+For context, this happened in a Node.js v22 application maintained by three fast-paced engineering teams, with a total of over a dozen contributors. We use Prisma v6 as our ORM against a MySQL database. However, everything I mention here is also applicable to Drizzle, another ORM for JavaScript and TypeScript applications.
 
 ## The error
 
@@ -168,6 +169,34 @@ A Proxy is a great feature of the language that allows us to intercept reads on 
 
 This minimal change immediately addresses and fixes any existing instance of the problem in the entire code base and makes it impossible for a consumer to accidentally get into this situation again. It also allows us to remove transaction clients from arguments everywhere as we were doing before, reducing the complexity of the signature of our functions.
 
+Something else that's really nice is that it mimics the semantics of transactions in SQL itself. In SQL, a transaction is started simply by executing the `BEGIN` statement. After that, any and all subsequent statements will happen inside that transaction scope until a `COMMIT` or `ROLLBACK` statement is found. There's no need to specify any form of transaction identifier in future statements, and there's no additional reference to the open transaction either.
+
+In my solution, calling `runInDbTransaction` represents that `BEGIN` statement, and closing the scope of its callback argument represents the `COMMIT` phase, to end the transaction.
+
+Although I understand Prisma's decision for its current transaction API, I feel we would be better off with an API that more closely resembled how it works in SQL.
+
+I also maintain code bases in Go where we use GORM. They have an API that is exactly the same as Prisma's and Drizzle's callback version, but on top of that, they also offer a [manual transaction control option](https://gorm.io/docs/transactions.html#Control-the-transaction-manually). Take a look:
+
+```go
+// begin a transaction
+tx := db.Begin()
+
+// do some database operations in the transaction (use 'tx' from this point, not 'db')
+tx.Create(...)
+
+// ...
+
+// rollback the transaction in case of error
+tx.Rollback()
+
+// Or commit the transaction
+tx.Commit()
+```
+
+This makes more sense to me, specially after our experience with this issue. An API like this could be replicated in user-land using context and proxies, just like I did above.
+
+The callback API feels like too much of a foot-gun. You only run into issues if you use it wrong, in an unintended way, but the fact that a wrong way to use exists at all is a design flaw, in my opinion. Either way, offering options is the way to go, so kudos to the GORM team here.
+
 ### Performance
 
 A common concern and criticism that you see related to the usage of proxies is that they have an impact on performance. This impact comes from the additional overhead associated with the fact that each property access has to go through the Proxy handler.
@@ -241,3 +270,9 @@ Error: Lock wait timeout exceeded; try restarting transaction
 There’s one big difference though. The delay is much longer, 50 seconds to be exact, before the transaction times out and throws. This timeout is not configurable with Drizzle.
 
 This experience is much worse compared to that in Prisma which has a default timeout of 5 seconds that can be changed per transaction. Imagine introducing this bug by accident on production and your users have to wait 50 seconds before they get a failed response from the server! The longer timeout also makes it more difficult to troubleshoot and fix. So I’ll have to give Prisma the win on this one.
+
+## Conclusion
+
+This solution has been in production for a while. I tested it across instances of previous incidents we had already fixed manually before. The results are as expected and no issues have been found.
+
+Develoepr experience has also improved dramatically for implementation of new features now that our engineers don't have to worry about transaction management, argument drilling and making sure they're using the correct client. Personally I feel the release of this cognitive burden makes me more relaxed.
