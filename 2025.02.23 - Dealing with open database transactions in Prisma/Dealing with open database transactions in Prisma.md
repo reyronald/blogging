@@ -2,11 +2,13 @@
 title: Dealing with open database transactions in Prisma
 author: Ronald Rey
 username: @reyronald
-date: 2025-02-22
+date: 2025-02-23
 tags: [Prisma, Drizzle, ORM, Database, Transactions]
 category: Databases
 summary: This post discusses challenges faced when dealing with open database transactions in Prisma and the solution implemented using AsyncLocalStorage and proxies.
 ---
+
+Photo by <a href="https://unsplash.com/@aminhasani?utm_content=creditCopyText&utm_medium=referral&utm_source=unsplash">Amin Hasani</a> on <a href="https://unsplash.com/photos/white-ceramic-mug-on-white-table-j16dLbiu8Kk?utm_content=creditCopyText&utm_medium=referral&utm_source=unsplash">Unsplash</a>
 
 # Dealing with open database transactions in Prisma
 
