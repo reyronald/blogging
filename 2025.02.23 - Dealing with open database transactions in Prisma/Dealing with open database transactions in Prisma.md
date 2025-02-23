@@ -21,11 +21,20 @@ For context, this happened in a Node.js v22 application maintained by three fast
 The exact error I’m referring to is the one below:
 
 ```bash
-PrismaClientKnownRequestError: Transaction API error: Transaction already closed: A commit cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 5012 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction.
+PrismaClientKnownRequestError: Transaction API error: Transaction
+already closed: A commit cannot be executed on an expired
+transaction. The timeout for this transaction was 5000 ms, however
+5012 ms passed since the start of the transaction. Consider
+increasing the interactive transaction timeout or doing less work
+in the transaction.
   code: 'P2028',
   clientVersion: '6.3.1',
   meta: {
-    error: 'Transaction already closed: A commit cannot be executed on an expired transaction. The timeout for this transaction was 5000 ms, however 5012 ms passed since the start of the transaction. Consider increasing the interactive transaction timeout or doing less work in the transaction.'
+    error: 'Transaction already closed: A commit cannot be executed
+    on an expired transaction. The timeout for this transaction was
+    5000 ms, however 5012 ms passed since the start of the
+    transaction. Consider increasing the interactive transaction
+    timeout or doing less work in the transaction.'
   }
 ```
 
@@ -56,7 +65,7 @@ One additional hurdle here is that `$transaction` has an overload that takes in 
 
 This misuse is exactly what was happening to us.
 
-We were aware of what caused the error and why, but we have a very large and complex code base with long function calls that are maintained by up to 3 different engineering teams and more than a dozen engineers. To orchestrate database operations that happen in multiple modules, we pass the transaction client as an argument to functions through many levels. When endpoints get too big, this passing of arguments becomes an issue very similar to the “prop drilling” problem you get in React apps.
+We were aware of what caused the error and why, but we have a very large and complex code base with long function calls. To orchestrate database operations that happen in multiple modules, we pass the transaction client as an argument to functions through many levels. When endpoints get too big, this passing of arguments becomes an issue very similar to the [“prop drilling”](https://react.dev/learn/passing-data-deeply-with-context) problem you get in React apps.
 
 This becomes more than just annoying when those functions are re-used in different contexts where a transaction is not always needed, so that argument is then marked as optional by the developer working on a new feature.
 
@@ -74,13 +83,13 @@ I was looking for a solution that:
 2. Fixed the existing offending issues
 3. Prevented the issue from happening again in the future altogether
 
-What I realized was that I had already implemented a context-tracking functionality in our app a long time ago based on [`AsyncLocalStorage`](https://nodejs.org/api/async_context.html), to store data like trace ids and user ids. We had been battle-testing it for a long time already so I am 100% confident that it works everywhere, especially after we squashed a few edge cases like [this one](https://github.com/expressjs/multer/issues/814).
+What I realized was that I had already implemented a context-tracking functionality in our app a long time ago based on [`AsyncLocalStorage`](https://nodejs.org/api/async_context.html), to store data like trace ids and user ids throughout the lifetime of a request. We had been battle-testing it for a long time already so I am 100% confident that it works everywhere, especially after we squashed a few edge cases like [this one](https://github.com/expressjs/multer/issues/814).
 
 Our code base is private, but I extracted that bit to an OSS package, so you can view those sources here if you’re curious: [https://github.com/reyronald/async-local-storage](https://github.com/reyronald/async-local-storage#readme). We don’t use that package in our app but its implementation is very similar.
 
-So my solution consists of storing the active transaction in that asynchronous context, and instead of accessing the Prisma client, access the transaction client if available anytime a database mutation is attempted.
+My solution consists of storing the active transaction in that asynchronous context, and instead of accessing the Prisma client, access the transaction client if available anytime a database query is attempted.
 
-We also had OpenTelemetry already, which provides a context concept that’s internally built on top of AsyncLocalStorage. I could’ve used that instead if I didn’t already have our own.
+We also had OpenTelemetry already, which provides a context concept that’s internally built on top of AsyncLocalStorage. I could’ve used that instead if we didn’t already have our own.
 
 To be able to do this though, I needed to be able to control all access to those clients. We had something in place already for this but it wasn’t used everywhere. Thankfully the changes required to address that were small and I was okay with pursuing that.
 
@@ -250,7 +259,7 @@ It’s safe to say that this won’t be an issue for most apps. If someone has a
 
 ## What about Drizzle?
 
-Drizzle is a competing option to Prisma in the ORM space for Node.js. It’s a bit younger but preferred by many not only because of the similarity of its API to raw SQL, but also because it is said to be more performant and provides a few features that Prisma doesn’t have. For example, it supports transaction save points, which are not available at the time of this writing in Prisma v6.
+Drizzle is a competing option to Prisma in the ORM space for JS and TS runtimes. It’s a bit younger but preferred by many not only because of the similarity of its API to raw SQL, but also because it is said to be more performant and provides a few features that Prisma doesn’t have. For example, it supports transaction save points, which are not available at the time of this writing in Prisma v6.
 
 I wanted to see how Drizzle would handle this same scenario. Turns out that it behaves almost the same, and you do get a similar runtime error thrown. See below.
 
