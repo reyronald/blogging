@@ -171,11 +171,11 @@ This minimal change immediately addresses and fixes any existing instance of the
 
 Something else that's really nice is that it mimics the semantics of transactions in SQL itself. In SQL, a transaction is started simply by executing the `BEGIN` statement. After that, any and all subsequent statements will happen inside that transaction scope until a `COMMIT` or `ROLLBACK` statement is found. There's no need to specify any form of transaction identifier in future statements, and there's no additional reference to the open transaction either.
 
-In my solution, calling `runInDbTransaction` represents that `BEGIN` statement, and closing the scope of its callback argument represents the `COMMIT` phase, to end the transaction.
+In my solution, calling `runInDbTransaction` represents that `BEGIN` statement, and closing the scope of its callback argument represents the `COMMIT` phase to end the transaction.
 
-Although I understand Prisma's decision for its current transaction API, I feel we would be better off with an API that more closely resembled how it works in SQL.
+Although I understand Prisma's decision for its current transaction API, I feel we would be better off with an API that more closely resembles how it works in SQL.
 
-I also maintain code bases in Go where we use GORM. They have an API that is exactly the same as Prisma's and Drizzle's callback version, but on top of that, they also offer a [manual transaction control option](https://gorm.io/docs/transactions.html#Control-the-transaction-manually). Take a look:
+I also maintain codebases in Go where we use GORM. They have an API that is exactly the same as Prisma's and Drizzle's callback version, but on top of that, they also offer a [manual transaction control option](https://gorm.io/docs/transactions.html#Control-the-transaction-manually). Take a look:
 
 ```go
 // begin a transaction
@@ -193,9 +193,9 @@ tx.Rollback()
 tx.Commit()
 ```
 
-This makes more sense to me, specially after our experience with this issue. An API like this could be replicated in user-land using context and proxies, just like I did above.
+This makes more sense to me, especially after our experience with this issue. An API like this could be replicated in user-land using context and proxies, just like I did above.
 
-The callback API feels like too much of a foot-gun. You only run into issues if you use it wrong, in an unintended way, but the fact that a wrong way to use exists at all is a design flaw, in my opinion. Either way, offering options is the way to go, so kudos to the GORM team here.
+The callback API feels like too much of a foot-gun. You only run into issues if you use it wrong, in an unintended way, but the fact that a wrong way to use it exists at all is a design flaw, in my opinion. Either way, offering options is the way to go, so kudos to the GORM team here.
 
 ### Performance
 
@@ -236,7 +236,7 @@ boxplot(() => {
 await run()
 ```
 
-![image.png](./image.png)
+![proxy-benchmark.png](./proxy-benchmark.png)
 
 This shows that wrapping the client with a proxy slows down access by a factor of 6. I also ran tests where the proxied client was cached instead of re-wrapped on every iteration of the benchmark, and the result was the same, which means that the instantiation of the proxy doesn’t have a measurable impact.
 
